@@ -173,6 +173,64 @@ pub fn input<P: AsRef<Path> + ?Sized>(path: &P) -> Result<context::Input, Error>
     }
 }
 
+pub fn input_as<P: AsRef<Path> + ?Sized>(path: &P, format: &str) -> Result<context::Input, Error> {
+    unsafe {
+        let mut ps = ptr::null_mut();
+        let path: CString = from_path(path);
+        let format = CString::new(format).unwrap();
+
+        match avformat_open_input(
+            &mut ps,
+            path.as_ptr(),
+            av_find_input_format(format.as_ptr()),
+            ptr::null_mut(),
+        ) {
+            0 => match avformat_find_stream_info(ps, ptr::null_mut()) {
+                r if r >= 0 => Ok(context::Input::wrap(ps)),
+                e => {
+                    avformat_close_input(&mut ps);
+                    Err(Error::from(e))
+                }
+            },
+
+            e => Err(Error::from(e)),
+        }
+    }
+}
+
+pub fn input_as_with<P: AsRef<Path> + ?Sized>(
+    path: &P,
+    format: &str,
+    options: Dictionary,
+) -> Result<context::Input, Error> {
+    unsafe {
+        let mut ps = ptr::null_mut();
+        let path: CString = from_path(path);
+        let format = CString::new(format).unwrap();
+        let mut opts = options.disown();
+        let res = avformat_open_input(
+            &mut ps,
+            path.as_ptr(),
+            av_find_input_format(format.as_ptr()),
+            &mut opts,
+        );
+
+        Dictionary::own(opts);
+
+        match res {
+            0 => match avformat_find_stream_info(ps, ptr::null_mut()) {
+                r if r >= 0 => Ok(context::Input::wrap(ps)),
+                e => {
+                    avformat_close_input(&mut ps);
+                    Err(Error::from(e))
+                }
+            },
+
+            e => Err(Error::from(e)),
+        }
+    }
+}
+
 pub fn input_with_dictionary<P: AsRef<Path> + ?Sized>(
     path: &P,
     options: Dictionary,
